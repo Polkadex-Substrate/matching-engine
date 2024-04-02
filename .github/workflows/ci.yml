@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: set home. # bug self hosted https://github.com/actions-rs/toolchain/issues/137
         run: |
-          echo "HOME=/root" >> ${GITHUB_ENV} # bug
+          echo "HOME=/ubuntu" >> ${GITHUB_ENV} # bug
       - name: Install dependencies
         run: |
           sudo apt update

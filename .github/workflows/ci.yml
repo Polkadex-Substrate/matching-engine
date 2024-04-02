@@ -1,0 +1,87 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    types: [labeled]
+  push:
+    branches: [ develop, master ]
+
+
+
+jobs:
+  build:
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: set home. # bug self hosted https://github.com/actions-rs/toolchain/issues/137
+        run: |
+          echo "HOME=/root" >> ${GITHUB_ENV} # bug
+      - name: Install dependencies
+        run: |
+          apt update
+          apt install -y zip
+      - name: Install latest nightly with wasm target
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          default: true
+          components: rustfmt, clippy
+      - name: Install .toml files linter
+        run: |
+          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-linux-x86_64.gz \
+          | gzip -d - | install -m 755 /dev/stdin /usr/local/bin/taplo
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+      - name: Using Cache for reusing install dependency "💡"
+        uses: actions/cache@v3
+        id: cache_orderbook_v2
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Add Linux target "💡"
+        run: rustup target add x86_64-unknown-linux-gnu
+      - name: Check versions info
+        run: |
+          rustup -V
+          cargo fmt -- --version
+          cargo clippy -V
+      - name: Lint .toml files
+        run: |
+          taplo lint
+          taplo fmt --check
+
+      #for primitives
+      - name: Check Formatting
+        run: cargo fmt --check
+      - name: Check Clippy
+        run: cargo clippy -- -D warnings
+      - name: Testing
+        run: cargo test
+      - name: Building
+        run: cargo build
+
+      - name: Run Cargo Tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: '0.22.0'
+          # For some reason `working-directory` definition does not affect `tarpaulin`
+          # and because of that `manifest-path` is specified.
+          args: '--manifest-path ./Cargo.toml --avoid-cfg-tarpaulin --exclude convert-key db-scripts engine-message-tool find_stid send-worker-nonce --workspace --timeout 180'
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+          fail_ci_if_error: true
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v1
+        with:
+          name: code-coverage-report
+          path: cobertura.xml

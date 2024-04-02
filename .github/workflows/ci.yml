@@ -16,10 +16,6 @@ jobs:
       - name: set home. # bug self hosted https://github.com/actions-rs/toolchain/issues/137
         run: |
           echo "HOME=/ubuntu" >> ${GITHUB_ENV} # bug
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y zip
       - name: Install latest nightly with wasm target
         uses: actions-rs/toolchain@v1
         with:

@@ -1,6 +1,5 @@
 mod error;
 mod fees;
-mod types;
 mod utils;
 
 use crate::error::Error;

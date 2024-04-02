@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ needs.start-runner.outputs.label }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: set home. # bug self hosted https://github.com/actions-rs/toolchain/issues/137

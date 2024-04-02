@@ -52,8 +52,6 @@ jobs:
         run: |
           taplo lint
           taplo fmt --check
-
-      #for primitives
       - name: Check Formatting
         run: cargo fmt --check
       - name: Check Clippy

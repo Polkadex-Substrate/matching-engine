@@ -64,6 +64,12 @@ pub struct Orderbook {
     fees_collector: FeeCollector,
 }
 
+impl Default for Orderbook {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Orderbook {
     pub fn new() -> Self {
         Self {

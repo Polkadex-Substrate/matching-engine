@@ -2,6 +2,9 @@ mod error;
 mod fees;
 mod utils;
 
+#[cfg(test)]
+mod tests;
+
 use crate::error::Error;
 use crate::fees::{AccountFee, FeeCollector};
 use crate::utils::{
@@ -188,12 +191,14 @@ impl Orderbook {
         }
     }
 
-    pub fn settle_order_updates(&mut self, order: &Order, changes: &mut OrderExecutionResult) {
+    pub fn settle_order_updates(
+        &mut self,
+        order: &Order,
+        changes: &mut OrderExecutionResult,
+    ) -> anyhow::Result<()> {
         // If the order is still open, insert it into the orderbook.
-        if order.status == OrderStatus::OPEN && self.insert_order(order).is_err() {
-            // don't add to state change if the insert order was not completed,
-            // other wise it will lead to a inconsistent state.
-            return;
+        if order.status == OrderStatus::OPEN {
+            self.insert_order(order)?;
         }
         //add current order to the orderbook
         changes.modified_orders.insert(order.id, order.clone());
@@ -205,6 +210,7 @@ impl Orderbook {
             maker.stid = changes.stid;
             changes.modified_orders.insert(maker.id, maker);
         }
+        Ok(())
     }
 
     pub fn insert_order(&mut self, order: &Order) -> anyhow::Result<()> {
@@ -359,6 +365,33 @@ impl Orderbook {
                 amount,
                 ..
             } = trade;
+
+            // Check if underpriced execution
+            debug_assert!((*price).eq(&maker.price));
+            match taker.side {
+                OrderSide::Ask => {
+                    // Ignore - reservation happens in qty so price is not affecting it
+                }
+                OrderSide::Bid => {
+                    if *price < taker.price {
+                        let diff = taker.price.saturating_sub(*price);
+                        let to_unreserve = diff.saturating_mul(*amount);
+                        let final_state = self
+                            .balances
+                            .entry((taker.main_account.clone(), taker.pair.quote))
+                            .and_modify(|(free, reserved)| {
+                                *reserved =
+                                    reserved.saturating_sub(to_unreserve).max(Decimal::zero());
+                                *free = Order::rounding_off(free.saturating_add(to_unreserve));
+                            })
+                            .or_insert((Decimal::zero(), Decimal::zero()));
+                        changes
+                            .balances
+                            .insert((taker.main_account.clone(), taker.pair.quote), *final_state);
+                    }
+                }
+            }
+
             let maker_main = maker.main_account.clone();
             let quantity = amount;
             for order in [maker, taker] {
@@ -501,7 +534,7 @@ impl Orderbook {
                 }
             }
         };
-
+        log::debug!(target: "matching","Reserving {:?} of {:?}", asset,amount);
         let amount = Order::rounding_off(amount);
         let mut is_success = false;
         let final_state = self
@@ -627,6 +660,13 @@ impl Orderbook {
         println!("Book len: {:?}", book.len());
     }
 
+    pub fn add_trading_pair(&mut self, config: TradingPairConfig) {
+        let pair = TradingPair::from(config.quote_asset, config.base_asset);
+        self.trading_pairs.insert(pair, config);
+        self.bid_books.insert(pair, Default::default());
+        self.ask_books.insert(pair, Default::default());
+    }
+
     pub fn process_order(
         &mut self,
         mut order: Order,
@@ -650,7 +690,7 @@ impl Orderbook {
         }
         log::info!("generated {:?} trades", execution_result.trades.len());
         // settle order updates from trades
-        self.settle_order_updates(&order, &mut execution_result);
+        self.settle_order_updates(&order, &mut execution_result)?;
         //Settle all price level updates from trades
         self.settle_price_level_updates(&config, &order, &mut execution_result);
         // Settle all balances from trades

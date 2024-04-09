@@ -6,7 +6,6 @@ use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 
-
 // This test was added to check the different price matching reservation bug
 #[test]
 pub fn test_trade_price() {

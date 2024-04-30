@@ -1,1 +1,2 @@
-mod trade_price_test;
+mod trade_price;
+mod precision;
